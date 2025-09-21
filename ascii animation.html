@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ascii animation</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            font-size: 1vmin;
+        }
+
+        body {
+            display: flex;
+            position: relative;
+            justify-content: center;
+            align-items: center;
+            width: 100%;
+            height: 100dvh;
+            background-color: #000000;
+            overflow: hidden;
+        }
+
+        .asciibox {
+            font-size: 1rem;
+            line-height: 1.5rem;
+            letter-spacing: 1rem;
+            font-family: 'Courier New', monospace;
+            white-space: pre;
+        }
+        
+        .ascii-char {
+            display: inline;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="asciibox"></div>
+</body>
+
+<script type="module">
+    // JIEJOE produce
+    // b站主页：https://space.bilibili.com/3546390319860710
+    import { parseGIF, decompressFrames } from 'https://cdn.jsdelivr.net/npm/gifuct-js@2.1.2/+esm';
+    const asciibox = {
+        container: document.querySelector(".asciibox"),
+        width: 0,
+        height: 0,
+        scale_nums: 6,
+        texts: [],
+        current_text_index: 0,
+        init() {
+            fetch("haha.gif")
+                .then((resp) => resp.arrayBuffer())
+                .then((buff) => {
+                    const gif = parseGIF(buff);
+                    this.width = gif.lsd.width;
+                    this.height = gif.lsd.height;
+                    
+                    // 创建主画布用于正确处理帧序列
+                    const mainCanvas = document.createElement("canvas");
+                    const mainCtx = mainCanvas.getContext("2d");
+                    mainCanvas.width = this.width;
+                    mainCanvas.height = this.height;
+                    
+                    decompressFrames(gif, true).forEach((frame, index) => {
+                        // 根据处理方式决定是否清除背景
+                        if (index === 0 || frame.disposalType === 2) {
+                            // 第一帧或需要恢复背景色的帧，清除画布
+                            mainCtx.clearRect(0, 0, this.width, this.height);
+                        }
+                        
+                        // 创建临时画布处理当前帧
+                        const tempCanvas = document.createElement("canvas");
+                        const tempCtx = tempCanvas.getContext("2d");
+                        tempCanvas.width = frame.dims.width;
+                        tempCanvas.height = frame.dims.height;
+                        
+                        const image_data = new ImageData(
+                            frame.patch,
+                            frame.dims.width,
+                            frame.dims.height
+                        );
+                        tempCtx.putImageData(image_data, 0, 0);
+                        
+                        // 将帧绘制到主画布的正确位置
+                        mainCtx.drawImage(tempCanvas, frame.dims.left, frame.dims.top);
+                        
+                        // 获取完整画布的图像数据
+                        this.create_texts(mainCtx.getImageData(0, 0, this.width, this.height).data);
+                    });
+                    setInterval(() => {
+                        this.current_text_index = (this.current_text_index + 1) % (this.texts.length - 1);
+                        this.container.innerHTML = this.texts[this.current_text_index];
+                    }, 60);
+                });
+        },
+        create_texts(data) {
+            let htmlContent = "";
+            const levels = [
+                ["█", "▓"], // 最暗
+                ["▒", "░"], // 中等
+                ["·", "°"], // 较亮
+                [" "]       // 最亮/透明
+            ];
+            
+            for (let y = 0; y < this.height; y += this.scale_nums) {
+                for (let x = 0; x < this.width; x += this.scale_nums) {
+                    const i = (y * this.width + x) * 4;
+                    const r = data[i];
+                    const g = data[i + 1];
+                    const b = data[i + 2];
+                    const alpha = data[i + 3];
+                    
+                    // 如果透明度低于阈值，使用空格
+                    if (alpha < 128) {
+                        htmlContent += " ";
+                        continue;
+                    }
+                    
+                    // 计算亮度
+                    const brightness = (r * 0.299 + g * 0.587 + b * 0.114) / 255;
+                    
+                    // 根据亮度选择字符
+                    const levelIndex = Math.min(Math.floor((1 - brightness) * levels.length), levels.length - 1);
+                    const level = levels[levelIndex];
+                    const char = level[Math.floor(Math.random() * level.length)];
+                    
+                    // 生成带颜色的 span 元素
+                    if (char !== " ") {
+                        const color = `rgb(${r}, ${g}, ${b})`;
+                        htmlContent += `<span class="ascii-char" style="color: ${color};">${char}</span>`;
+                    } else {
+                        htmlContent += " ";
+                    }
+                }
+                htmlContent += "\n";
+            }
+            this.texts.push(htmlContent);
+        }
+    };
+    asciibox.init();
+</script>
+
+</html>
